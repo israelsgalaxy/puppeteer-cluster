@@ -1,12 +1,12 @@
-import { BrowserPool } from '@crawlee/browser-pool';
-import ConcurrencyImplementation, { ResourceData } from './ConcurrencyImplementation';
+import { Browser, LaunchOptions } from 'patchright';
+import ConcurrencyImplementation, { ResourceData, CustomBroswerContextOptions } from './ConcurrencyImplementation';
 export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImplementation {
-    protected browser: BrowserPool | null;
-    private static plugin;
+    protected browser: Browser | null;
     private repairing;
     private repairRequested;
     private openInstances;
     private waitingForRepairResolvers;
+    constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions);
     private repair;
     init(): Promise<void>;
     close(): Promise<void>;

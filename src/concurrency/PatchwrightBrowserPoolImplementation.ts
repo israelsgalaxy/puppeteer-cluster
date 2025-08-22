@@ -1,7 +1,6 @@
-import { BrowserPool, PlaywrightPlugin } from '@crawlee/browser-pool';
-import { chromium } from 'patchright';
+import { chromium, Browser, LaunchOptions } from 'patchright';
 
-import ConcurrencyImplementation, { ResourceData } from './ConcurrencyImplementation';
+import ConcurrencyImplementation, { ResourceData, CustomBroswerContextOptions } from './ConcurrencyImplementation';
 
 import { debugGenerator, timeoutExecute } from '../util';
 const debug = debugGenerator('SingleBrowserImpl');
@@ -10,20 +9,16 @@ const BROWSER_TIMEOUT = 5000;
 
 export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImplementation {
 
-    protected browser: BrowserPool | null = null;
-    // @ts-ignore
-    private static plugin = new PlaywrightPlugin(chromium, {
-        useIncognitoPages: true,
-        launchOptions: {
-            headless: true,
-            channel: "chrome"
-        }
-    });
+    protected browser: Browser | null = null;
 
     private repairing: boolean = false;
     private repairRequested: boolean = false;
     private openInstances: number = 0;
     private waitingForRepairResolvers: (() => void)[] = [];
+
+    constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions) {
+        super(launchOptions, contextOptions);
+    }
 
     private async repair() {
         if (this.openInstances !== 0 || this.repairing) {
@@ -37,15 +32,13 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
 
         try {
             // will probably fail, but just in case the repair was not necessary
-            await timeoutExecute(BROWSER_TIMEOUT, (<BrowserPool>this.browser).destroy());
+            await timeoutExecute(BROWSER_TIMEOUT, (<Browser>this.browser).close());
         } catch (e) {
             debug('Unable to close browser pool.');
         }
 
         try {
-            this.browser = new BrowserPool({
-                browserPlugins: [PatchwrightBrowserPoolImplementation.plugin],
-            });
+            this.browser = await chromium.launch(this.launchOptions);
         } catch (err) {
             throw new Error('Unable to restart browser pool.');
         }
@@ -56,17 +49,16 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     }
 
     public async init() {
-        this.browser = new BrowserPool({
-            browserPlugins: [PatchwrightBrowserPoolImplementation.plugin],
-        });
+        this.browser = await chromium.launch(this.launchOptions);
     }
 
     public async close() {
-        await (<BrowserPool>this.browser).destroy();
+        await (<Browser>this.browser).close();
     }
 
     protected async createResources(): Promise<ResourceData> {
-        const page = await (<BrowserPool>this.browser).newPage();
+        const contextOptions = this.contextOptions?.proxyGenerator === undefined ? this.contextOptions : { ...this.contextOptions, proxy: this.contextOptions?.proxyGenerator() }
+        const page = await (<Browser>this.browser).newPage(this.contextOptions);
         return {
             page,
         };

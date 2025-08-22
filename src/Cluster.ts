@@ -3,12 +3,12 @@ import Job, { ExecuteCallbacks, ExecuteReject, ExecuteResolve, JobData } from '.
 import Display from './Display';
 import * as util from './util';
 import Worker, { WorkResult } from './Worker';
-import type { Page } from "patchright"
+import type { LaunchOptions, Page } from "patchright"
 
 import Queue from './Queue';
 import SystemMonitor from './SystemMonitor';
 import { EventEmitter } from 'events';
-import ConcurrencyImplementation, { WorkerInstance } from './concurrency/ConcurrencyImplementation';
+import ConcurrencyImplementation, { WorkerInstance, CustomBroswerContextOptions } from './concurrency/ConcurrencyImplementation';
 import PatchwrightBrowserPoolImplementation from './concurrency/PatchwrightBrowserPoolImplementation';
 
 const debug = util.debugGenerator('Cluster');
@@ -21,6 +21,8 @@ interface ClusterOptions {
     timeout: number;
     retryLimit: number;
     retryDelay: number;
+    launchOptions: LaunchOptions;
+    contextOptions?: CustomBroswerContextOptions;
 }
 
 type Partial<T> = {
@@ -37,6 +39,11 @@ const DEFAULT_OPTIONS: ClusterOptions = {
     timeout: 30 * 1000,
     retryLimit: 0,
     retryDelay: 0,
+    launchOptions: {
+        channel: "chrome",
+        headless: true
+    },
+    contextOptions: undefined
 };
 
 interface TaskFunctionArguments{
@@ -110,7 +117,7 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
 
     private async init() {
         if (this.options.concurrency === Cluster.CONCURRENCY_CONTEXT) {
-            this.browser = new PatchwrightBrowserPoolImplementation();
+            this.browser = new PatchwrightBrowserPoolImplementation(this.options.launchOptions, this.options.contextOptions);
         } else {
             throw new Error(`Unknown concurrency option: ${this.options.concurrency}`);
         }
@@ -224,7 +231,7 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
 
         const worker = this.workers.shift() as Worker<ReturnData>;
         worker.busy = true;
-        ++this.workersBusy;
+        this.workersBusy += 1;
 
         if (this.workers.length !== 0 || this.allowedToStartWorker()) {
             // we can execute more work in parallel
@@ -277,7 +284,7 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
 
         // add worker to available workers again
         worker.busy = false;
-        --this.workersBusy;
+        this.workersBusy -= 1;
 
         await worker.close();
         await this.launchWorker();

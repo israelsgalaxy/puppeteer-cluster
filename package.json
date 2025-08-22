@@ -10,7 +10,6 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@crawlee/browser-pool": "^3.14.1",
     "debug": "^4.3.4",
     "patchright": "^1.52.5"
   },

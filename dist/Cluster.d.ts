@@ -1,6 +1,7 @@
 import { ExecuteCallbacks, JobData } from './Job';
-import type { Page } from "patchright";
+import type { LaunchOptions, Page } from "patchright";
 import { EventEmitter } from 'events';
+import { CustomBroswerContextOptions } from './concurrency/ConcurrencyImplementation';
 interface ClusterOptions {
     concurrency: number;
     maxConcurrency: number;
@@ -9,6 +10,8 @@ interface ClusterOptions {
     timeout: number;
     retryLimit: number;
     retryDelay: number;
+    launchOptions: LaunchOptions;
+    contextOptions?: CustomBroswerContextOptions;
 }
 type Partial<T> = {
     [P in keyof T]?: T[P];

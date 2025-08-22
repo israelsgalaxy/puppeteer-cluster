@@ -1,4 +1,14 @@
-import type { Page } from "patchright"
+import type { BrowserContextOptions, LaunchOptions, Page } from "patchright"
+
+interface Proxy {
+    server: string;
+    username?: string;
+    password?: string;
+};
+
+export interface CustomBroswerContextOptions extends BrowserContextOptions {
+    proxyGenerator: () => Proxy;
+}
 
 /**
  * ABSTRACT CLASS Needs to be implemented to manage one or more browsers via puppeteer instances
@@ -21,6 +31,15 @@ export default abstract class ConcurrencyImplementation {
      * Creates a worker and returns it
      */
     public abstract workerInstance(): Promise<WorkerInstance>;
+
+    public launchOptions: LaunchOptions;
+
+    public contextOptions?: CustomBroswerContextOptions;
+
+    constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions) {
+        this.launchOptions = launchOptions;
+        this.contextOptions = contextOptions;
+    }
 }
 
 /**
