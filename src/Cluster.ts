@@ -1,33 +1,26 @@
 
-import Job, { ExecuteResolve, ExecuteReject, ExecuteCallbacks } from './Job';
+import Job, { ExecuteCallbacks, ExecuteReject, ExecuteResolve, JobData } from './Job';
 import Display from './Display';
 import * as util from './util';
 import Worker, { WorkResult } from './Worker';
+import type { Page } from "patchright"
 
-import * as builtInConcurrency from './concurrency/builtInConcurrency';
-
-import type { Page, PuppeteerNodeLaunchOptions } from 'puppeteer';
 import Queue from './Queue';
 import SystemMonitor from './SystemMonitor';
 import { EventEmitter } from 'events';
-import ConcurrencyImplementation, { WorkerInstance, ConcurrencyImplementationClassType }
-    from './concurrency/ConcurrencyImplementation';
+import ConcurrencyImplementation, { WorkerInstance } from './concurrency/ConcurrencyImplementation';
+import PatchwrightBrowserPoolImplementation from './concurrency/PatchwrightBrowserPoolImplementation';
 
 const debug = util.debugGenerator('Cluster');
 
 interface ClusterOptions {
-    concurrency: number | ConcurrencyImplementationClassType;
-    maxConcurrency: number;
+    concurrency: number;
+    maxConcurrency: number; // same as pool size
     workerCreationDelay: number;
-    puppeteerOptions: PuppeteerNodeLaunchOptions;
-    perBrowserOptions: PuppeteerNodeLaunchOptions[] | undefined;
     monitor: boolean;
     timeout: number;
     retryLimit: number;
     retryDelay: number;
-    skipDuplicateUrls: boolean;
-    sameDomainDelay: number;
-    puppeteer: any;
 }
 
 type Partial<T> = {
@@ -40,20 +33,13 @@ const DEFAULT_OPTIONS: ClusterOptions = {
     concurrency: 2, // CONTEXT
     maxConcurrency: 1,
     workerCreationDelay: 0,
-    puppeteerOptions: {
-        // headless: false, // just for testing...
-    },
-    perBrowserOptions: undefined,
     monitor: false,
     timeout: 30 * 1000,
     retryLimit: 0,
     retryDelay: 0,
-    skipDuplicateUrls: false,
-    sameDomainDelay: 0,
-    puppeteer: undefined,
 };
 
-interface TaskFunctionArguments<JobData> {
+interface TaskFunctionArguments{
     page: Page;
     data: JobData;
     worker: {
@@ -61,32 +47,28 @@ interface TaskFunctionArguments<JobData> {
     };
 }
 
-export type TaskFunction<JobData, ReturnData> = (
-    arg: TaskFunctionArguments<JobData>,
+export type TaskFunction<ReturnData> = (
+    arg: TaskFunctionArguments,
 ) => Promise<ReturnData>;
 
 const MONITORING_DISPLAY_INTERVAL = 500;
 const CHECK_FOR_WORK_INTERVAL = 100;
 const WORK_CALL_INTERVAL_LIMIT = 10;
 
-export default class Cluster<JobData = any, ReturnData = any> extends EventEmitter {
+export default class Cluster<ReturnData = any> extends EventEmitter {
 
-    static CONCURRENCY_PAGE = 1; // shares cookies, etc.
     static CONCURRENCY_CONTEXT = 2; // no cookie sharing (uses contexts)
-    static CONCURRENCY_BROWSER = 3; // no cookie sharing and individual processes (uses contexts)
 
     private options: ClusterOptions;
-    private perBrowserOptions: PuppeteerNodeLaunchOptions[] | null = null;
-    private workers: Worker<JobData, ReturnData>[] = [];
-    private workersAvail: Worker<JobData, ReturnData>[] = [];
-    private workersBusy: Worker<JobData, ReturnData>[] = [];
+    private workers: Worker<ReturnData>[] = [];
+    private workersBusy = 0;
     private workersStarting = 0;
 
     private allTargetCount = 0;
-    private jobQueue: Queue<Job<JobData, ReturnData>> = new Queue<Job<JobData, ReturnData>>();
+    private jobQueue: Queue<Job<ReturnData>> = new Queue<Job<ReturnData>>();
     private errorCount = 0;
 
-    private taskFunction: TaskFunction<JobData, ReturnData> | null = null;
+    private taskFunction: TaskFunction<ReturnData> | null = null;
     private idleResolvers: (() => void)[] = [];
     private waitForOneResolvers: ((data:JobData) => void)[] = [];
     private browser: ConcurrencyImplementation | null = null;
@@ -97,9 +79,6 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
 
     private monitoringInterval: NodeJS.Timeout | null = null;
     private display: Display | null = null;
-
-    private duplicateCheckUrls: Set<string> = new Set();
-    private lastDomainAccesses: Map<string, number> = new Map();
 
     private systemMonitor: SystemMonitor = new SystemMonitor();
 
@@ -130,23 +109,8 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
     }
 
     private async init() {
-        const browserOptions = this.options.puppeteerOptions;
-        let puppeteer = this.options.puppeteer;
-
-        if (this.options.puppeteer == null) { // check for null or undefined
-            puppeteer = require('puppeteer');
-        } else {
-            debug('Using provided (custom) puppteer object.');
-        }
-
-        if (this.options.concurrency === Cluster.CONCURRENCY_PAGE) {
-            this.browser = new builtInConcurrency.Page(browserOptions, puppeteer);
-        } else if (this.options.concurrency === Cluster.CONCURRENCY_CONTEXT) {
-            this.browser = new builtInConcurrency.Context(browserOptions, puppeteer);
-        } else if (this.options.concurrency === Cluster.CONCURRENCY_BROWSER) {
-            this.browser = new builtInConcurrency.Browser(browserOptions, puppeteer);
-        } else if (typeof this.options.concurrency === 'function') {
-            this.browser = new this.options.concurrency(browserOptions, puppeteer);
+        if (this.options.concurrency === Cluster.CONCURRENCY_CONTEXT) {
+            this.browser = new PatchwrightBrowserPoolImplementation();
         } else {
             throw new Error(`Unknown concurrency option: ${this.options.concurrency}`);
         }
@@ -154,22 +118,19 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         if (typeof this.options.maxConcurrency !== 'number') {
             throw new Error('maxConcurrency must be of number type');
         }
-        if (this.options.perBrowserOptions
-            && this.options.perBrowserOptions.length !== this.options.maxConcurrency) {
-            throw new Error('perBrowserOptions length must equal maxConcurrency');
-        }
-        if (this.options.perBrowserOptions) {
-            this.perBrowserOptions = [...this.options.perBrowserOptions];
-        }
 
         try {
-            await this.browser.init();
+            await this.browser?.init();
         } catch (err: any) {
             throw new Error(`Unable to launch browser, error message: ${err.message}`);
         }
 
         if (this.options.monitor) {
             await this.systemMonitor.init();
+        }
+
+        for (let i = 0; i < this.options.maxConcurrency; ++i) {
+            this.launchWorker();
         }
 
         // needed in case resources are getting free (like CPU/memory) to check if
@@ -183,25 +144,19 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         this.nextWorkerId += 1;
         this.lastLaunchedWorkerTime = Date.now();
 
-        let nextWorkerOption;
-        if (this.perBrowserOptions && this.perBrowserOptions.length > 0) {
-            nextWorkerOption = this.perBrowserOptions.shift();
-        }
-
         const workerId = this.nextWorkerId;
 
-        let workerBrowserInstance: WorkerInstance;
+        let workerInstance: WorkerInstance;
         try {
-            workerBrowserInstance = await (this.browser as ConcurrencyImplementation)
-                .workerInstance(nextWorkerOption);
+            workerInstance = await (this.browser as ConcurrencyImplementation).workerInstance();
         } catch (err: any) {
             throw new Error(`Unable to launch browser for worker, error message: ${err.message}`);
         }
 
-        const worker = new Worker<JobData, ReturnData>({
+        const worker = new Worker<ReturnData>({
             cluster: this,
             args: [''], // this.options.args,
-            browser: workerBrowserInstance,
+            workerInstance: workerInstance,
             id: workerId,
         });
         this.workersStarting -= 1;
@@ -210,12 +165,11 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
             // cluster was closed while we created a new worker (should rarely happen)
             worker.close();
         } else {
-            this.workersAvail.push(worker);
             this.workers.push(worker);
         }
     }
 
-    public async task(taskFunction: TaskFunction<JobData, ReturnData>) {
+    public async task(taskFunction: TaskFunction<ReturnData>) {
         this.taskFunction = taskFunction;
     }
 
@@ -247,13 +201,13 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
 
     private async doWork() {
         if (this.jobQueue.size() === 0) { // no jobs available
-            if (this.workersBusy.length === 0) {
+            if (this.workersBusy === 0) {
                 this.idleResolvers.forEach(resolve => resolve());
             }
             return;
         }
 
-        if (this.workersAvail.length === 0) { // no workers available
+        if (this.workers.length === 0) { // no workers available
             if (this.allowedToStartWorker()) {
                 await this.launchWorker();
                 this.work();
@@ -268,43 +222,11 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
             return;
         }
 
-        const url = job.getUrl();
-        const domain = job.getDomain();
+        const worker = this.workers.shift() as Worker<ReturnData>;
+        worker.busy = true;
+        ++this.workersBusy;
 
-        // Check if URL was already crawled (on skipDuplicateUrls)
-        if (this.options.skipDuplicateUrls
-            && url !== undefined && this.duplicateCheckUrls.has(url)) {
-            // already crawled, just ignore
-            debug(`Skipping duplicate URL: ${job.getUrl()}`);
-            this.work();
-            return;
-        }
-
-        // Check if the job needs to be delayed due to sameDomainDelay
-        if (this.options.sameDomainDelay !== 0 && domain !== undefined) {
-            const lastDomainAccess = this.lastDomainAccesses.get(domain);
-            if (lastDomainAccess !== undefined
-                && lastDomainAccess + this.options.sameDomainDelay > Date.now()) {
-                this.jobQueue.push(job, {
-                    delayUntil: lastDomainAccess + this.options.sameDomainDelay,
-                });
-                this.work();
-                return;
-            }
-        }
-
-        // Check are all positive, let's actually run the job
-        if (this.options.skipDuplicateUrls && url !== undefined) {
-            this.duplicateCheckUrls.add(url);
-        }
-        if (this.options.sameDomainDelay !== 0 && domain !== undefined) {
-            this.lastDomainAccesses.set(domain, Date.now());
-        }
-
-        const worker = this.workersAvail.shift() as Worker<JobData, ReturnData>;
-        this.workersBusy.push(worker);
-
-        if (this.workersAvail.length !== 0 || this.allowedToStartWorker()) {
+        if (this.workers.length !== 0 || this.allowedToStartWorker()) {
             // we can execute more work in parallel
             this.work();
         }
@@ -319,7 +241,7 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         }
 
         const result: WorkResult = await worker.handle(
-            (jobFunction as TaskFunction<JobData, ReturnData>),
+            (jobFunction as TaskFunction<ReturnData>),
             job,
             this.options.timeout,
         );
@@ -354,10 +276,11 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         this.waitForOneResolvers = [];
 
         // add worker to available workers again
-        const workerIndex = this.workersBusy.indexOf(worker);
-        this.workersBusy.splice(workerIndex, 1);
+        worker.busy = false;
+        --this.workersBusy;
 
-        this.workersAvail.push(worker);
+        await worker.close();
+        await this.launchWorker();
 
         this.work();
     }
@@ -376,62 +299,22 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         );
     }
 
-    // Type Guard for TypeScript
-    private isTaskFunction(
-        data: JobData | TaskFunction<JobData, ReturnData>,
-    ) : data is TaskFunction<JobData, ReturnData> {
-        return (typeof data === 'function');
-    }
-
-    private queueJob(
-        data: JobData | TaskFunction<JobData, ReturnData>,
-        taskFunction?: TaskFunction<JobData, ReturnData>,
-        callbacks?: ExecuteCallbacks,
-    ): void {
-        let realData: JobData | undefined;
-        let realFunction: TaskFunction<JobData, ReturnData> | undefined;
-        if (this.isTaskFunction(data)) {
-            realFunction = data;
-        } else {
-            realData = data;
-            realFunction = taskFunction;
-        }
-        const job = new Job<JobData, ReturnData>(realData, realFunction, callbacks);
+    public queue(data: JobData, taskFunction?: TaskFunction<ReturnData>, callbacks?: ExecuteCallbacks): void {
+        const job = new Job<ReturnData>(data, taskFunction, callbacks);
 
         this.allTargetCount += 1;
         this.jobQueue.push(job);
-        this.emit('queue', realData, realFunction);
+        this.emit('queue', data, taskFunction);
         this.work();
     }
 
-    public async queue(
-        data: JobData,
-        taskFunction?: TaskFunction<JobData, ReturnData>,
-    ): Promise<void>;
-    public async queue(
-        taskFunction: TaskFunction<JobData, ReturnData>,
-    ): Promise<void>;
-    public async queue(
-        data: JobData | TaskFunction<JobData, ReturnData>,
-        taskFunction?: TaskFunction<JobData, ReturnData>,
-    ): Promise<void> {
-        this.queueJob(data, taskFunction);
-    }
-
     public execute(
         data: JobData,
-        taskFunction?: TaskFunction<JobData, ReturnData>,
-    ): Promise<ReturnData>;
-    public execute(
-        taskFunction: TaskFunction<JobData, ReturnData>,
-    ): Promise<ReturnData>;
-    public execute(
-        data: JobData | TaskFunction<JobData, ReturnData>,
-        taskFunction?: TaskFunction<JobData, ReturnData>,
+        taskFunction?: TaskFunction<ReturnData>,
     ): Promise<ReturnData> {
         return new Promise<ReturnData>((resolve: ExecuteResolve, reject: ExecuteReject) => {
             const callbacks = { resolve, reject };
-            this.queueJob(data, taskFunction, callbacks);
+            this.queue(data, taskFunction, callbacks);
         });
     }
 
@@ -481,7 +364,7 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         const now = Date.now();
         const timeDiff = now - this.startTime;
 
-        const doneTargets = this.allTargetCount - this.jobQueue.size() - this.workersBusy.length;
+        const doneTargets = this.allTargetCount - this.jobQueue.size() - this.workersBusy;
         const donePercentage = this.allTargetCount === 0
             ? 1 : (doneTargets / this.allTargetCount);
         const donePercStr = (100 * donePercentage).toFixed(2);
@@ -512,7 +395,7 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         display.log(`== Workers:   ${this.workers.length + this.workersStarting}`);
 
         this.workers.forEach((worker, i) => {
-            const isIdle = this.workersAvail.indexOf(worker) !== -1;
+            const isIdle = !worker.busy;
             let workOrIdle;
             let workerUrl = '';
             if (isIdle) {

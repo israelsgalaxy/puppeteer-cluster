@@ -1,5 +1,4 @@
-
-import { Page, LaunchOptions } from 'puppeteer';
+import type { Page } from "patchright"
 
 /**
  * ABSTRACT CLASS Needs to be implemented to manage one or more browsers via puppeteer instances
@@ -8,19 +7,6 @@ import { Page, LaunchOptions } from 'puppeteer';
  * One WorkerInstance per maxWorkers, one JobInstance per job
  */
 export default abstract class ConcurrencyImplementation {
-
-    protected options: LaunchOptions;
-    protected puppeteer: any;
-
-    /**
-     * @param options  Options that should be provided to puppeteer.launch
-     * @param puppeteer  puppeteer object (like puppeteer or puppeteer-core)
-     */
-    public constructor(options: LaunchOptions, puppeteer: any) {
-        this.options = options;
-        this.puppeteer = puppeteer;
-    }
-
     /**
      * Initializes the manager
      */
@@ -34,9 +20,7 @@ export default abstract class ConcurrencyImplementation {
     /**
      * Creates a worker and returns it
      */
-    public abstract workerInstance(perBrowserOptions: LaunchOptions | undefined):
-        Promise<WorkerInstance>;
-
+    public abstract workerInstance(): Promise<WorkerInstance>;
 }
 
 /**
@@ -75,10 +59,4 @@ export interface JobInstance {
 
 export interface ResourceData {
     page: Page;
-    [key: string]: any;
 }
-
-export type ConcurrencyImplementationClassType = new (
-    options: LaunchOptions,
-    puppeteer: any,
-) => ConcurrencyImplementation;

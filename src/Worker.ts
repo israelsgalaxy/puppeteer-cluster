@@ -1,7 +1,7 @@
-import Job from './Job';
+import Job, { JobData } from './Job';
 import type Cluster from './Cluster';
 import type { TaskFunction } from './Cluster';
-import type { Page } from 'puppeteer';
+import type { Page } from "patchright"
 import { timeoutExecute, debugGenerator, log } from './util';
 import { inspect } from 'util';
 import { WorkerInstance, JobInstance } from './concurrency/ConcurrencyImplementation';
@@ -12,10 +12,10 @@ interface WorkerOptions {
     cluster: Cluster;
     args: string[];
     id: number;
-    browser: WorkerInstance;
+    workerInstance: WorkerInstance;
 }
 
-const BROWSER_INSTANCE_TRIES = 10;
+const WORKER_INSTANCE_TRIES = 10;
 
 export interface WorkError {
     type: 'error';
@@ -29,29 +29,26 @@ export interface WorkData {
 
 export type WorkResult = WorkError | WorkData;
 
-export default class Worker<JobData, ReturnData> implements WorkerOptions {
+export default class Worker<ReturnData> implements WorkerOptions {
 
     cluster: Cluster;
     args: string[];
     id: number;
-    browser: WorkerInstance;
+    workerInstance: WorkerInstance;
+    busy: boolean = false;
 
-    activeTarget: Job<JobData, ReturnData> | null = null;
+    activeTarget: Job<ReturnData> | null = null;
 
-    public constructor({ cluster, args, id, browser }: WorkerOptions) {
+    public constructor({ cluster, args, id, workerInstance }: WorkerOptions) {
         this.cluster = cluster;
         this.args = args;
         this.id = id;
-        this.browser = browser;
+        this.workerInstance = workerInstance;
 
         debug(`Starting #${this.id}`);
     }
 
-    public async handle(
-            task: TaskFunction<JobData, ReturnData>,
-            job: Job<JobData, ReturnData>,
-            timeout: number,
-        ): Promise<WorkResult> {
+    public async handle(task: TaskFunction<ReturnData>, job: Job<ReturnData>, timeout: number): Promise<WorkResult> {
         this.activeTarget = job;
 
         let jobInstance: JobInstance | null = null;
@@ -61,45 +58,33 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
 
         while (jobInstance === null) {
             try {
-                jobInstance = await this.browser.jobInstance();
+                jobInstance = await this.workerInstance.jobInstance();
                 page = jobInstance.resources.page;
             } catch (err: any) {
-                debug(`Error getting browser page (try: ${tries}), message: ${err.message}`);
-                await this.browser.repair();
+                debug(`Error getting worker page (try: ${tries}), message: ${err.message}`);
+                await this.workerInstance.repair();
                 tries += 1;
-                if (tries >= BROWSER_INSTANCE_TRIES) {
-                    throw new Error('Unable to get browser page');
+                if (tries >= WORKER_INSTANCE_TRIES) {
+                    throw new Error('Unable to get worker page');
                 }
             }
         }
 
-         // We can be sure that page is set now, otherwise an exception would've been thrown
+        // We can be sure that page is set now, otherwise an exception would've been thrown
         page = page as Page; // this is just for TypeScript
 
         let errorState: Error | null = null;
 
-        page.on('error', (err) => {
-            errorState = err;
-            log(`Error (page error) crawling ${inspect(job.data)} // message: ${err.message}`);
+        page.on('crash', (err) => {
+            errorState = new Error('Page crash.');
+            log(`Error (page crash) crawling ${inspect(job.data)}`);
         });
 
         debug(`Executing task on worker #${this.id} with data: ${inspect(job.data)}`);
 
         let result: any;
         try {
-            result = await timeoutExecute(
-                timeout,
-                task({
-                    page,
-                    // data might be undefined if queue is only called with a function
-                    // we ignore that case, as the user should use Cluster<undefined> in that case
-                    // to get correct typings
-                    data: job.data as JobData,
-                    worker: {
-                        id: this.id,
-                    },
-                }),
-            );
+            result = await timeoutExecute(timeout, task({page, data: job.data as JobData, worker: {id: this.id}}));
         } catch (err: any) {
             errorState = err;
             log(`Error crawling ${inspect(job.data)} // message: ${err.message}`);
@@ -110,8 +95,8 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
         try {
             await jobInstance.close();
         } catch (e: any) {
-            debug(`Error closing browser instance for ${inspect(job.data)}: ${e.message}`);
-            await this.browser.repair();
+            debug(`Error closing worker instance for ${inspect(job.data)}: ${e.message}`);
+            await this.workerInstance.repair();
         }
 
         this.activeTarget = null;
@@ -130,9 +115,9 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
 
     public async close(): Promise<void> {
         try {
-            await this.browser.close();
+            await this.workerInstance.close();
         } catch (err: any) {
-            debug(`Unable to close worker browser. Error message: ${err.message}`);
+            debug(`Unable to close worker instance. Error message: ${err.message}`);
         }
         debug(`Closed #${this.id}`);
     }

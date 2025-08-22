@@ -8,11 +8,15 @@ export interface ExecuteCallbacks {
     resolve: (value?: any) => void;
     reject: ExecuteReject;
 }
+export interface JobData {
+    url: string;
+    [key: string]: any;
+}
 
-export default class Job<JobData, ReturnData> {
+export default class Job<ReturnData> {
 
     public data?: JobData;
-    public taskFunction: TaskFunction<JobData, ReturnData> | undefined;
+    public taskFunction: TaskFunction<ReturnData> | undefined;
     public executeCallbacks: ExecuteCallbacks | undefined;
 
     private lastError: Error | null = null;
@@ -20,7 +24,7 @@ export default class Job<JobData, ReturnData> {
 
     public constructor(
         data?: JobData,
-        taskFunction?: TaskFunction<JobData, ReturnData>,
+        taskFunction?: TaskFunction<ReturnData>,
         executeCallbacks?: ExecuteCallbacks,
     ) {
         this.data = data;
@@ -32,25 +36,16 @@ export default class Job<JobData, ReturnData> {
         if (!this.data) {
             return undefined;
         }
-        if (typeof this.data === 'string') {
-            return this.data;
-        }
-        if (typeof (this.data as any).url === 'string') {
-            return (this.data as any).url;
-        }
-        return undefined;
+        return this.data.url;
     }
 
     public getDomain(): string | undefined {
-        // TODO use tld.js to restrict to top-level domain?
         const urlStr = this.getUrl();
         if (urlStr) {
             try {
                 const url = new URL(urlStr);
                 return url.hostname || undefined;
             } catch (e: any) {
-                // if urlStr is not a valid URL this might throw
-                // but we leave this to the user
                 return undefined;
             }
         }
