@@ -1,7 +1,7 @@
 import { ExecuteCallbacks, JobData } from './Job';
 import type { LaunchOptions, Page } from "patchright";
 import { EventEmitter } from 'events';
-import { CustomBroswerContextOptions } from './concurrency/ConcurrencyImplementation';
+import { CustomBroswerContextOptions, Proxy } from './concurrency/ConcurrencyImplementation';
 interface ClusterOptions {
     concurrency: number;
     maxConcurrency: number;
@@ -22,6 +22,7 @@ interface TaskFunctionArguments {
     data: JobData;
     worker: {
         id: number;
+        proxy?: Proxy;
     };
 }
 export type TaskFunction<ReturnData> = (arg: TaskFunctionArguments) => Promise<ReturnData>;

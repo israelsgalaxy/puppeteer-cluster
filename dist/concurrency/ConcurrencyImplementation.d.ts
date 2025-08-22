@@ -1,11 +1,11 @@
 import type { BrowserContextOptions, LaunchOptions, Page } from "patchright";
-interface Proxy {
+export interface Proxy {
     server: string;
     username?: string;
     password?: string;
 }
 export interface CustomBroswerContextOptions extends BrowserContextOptions {
-    proxyGenerator: () => Proxy;
+    proxyGenerator?: () => Proxy;
 }
 /**
  * ABSTRACT CLASS Needs to be implemented to manage one or more browsers via puppeteer instances
@@ -61,5 +61,5 @@ export interface JobInstance {
 }
 export interface ResourceData {
     page: Page;
+    proxy?: Proxy;
 }
-export {};

@@ -84,7 +84,7 @@ export default class Worker<ReturnData> implements WorkerOptions {
 
         let result: any;
         try {
-            result = await timeoutExecute(timeout, task({page, data: job.data as JobData, worker: {id: this.id}}));
+            result = await timeoutExecute(timeout, task({page, data: job.data as JobData, worker: {id: this.id, proxy: jobInstance.resources.proxy}}));
         } catch (err: any) {
             errorState = err;
             log(`Error crawling ${inspect(job.data)} // message: ${err.message}`);

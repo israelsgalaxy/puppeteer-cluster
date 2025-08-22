@@ -8,7 +8,7 @@ import type { LaunchOptions, Page } from "patchright"
 import Queue from './Queue';
 import SystemMonitor from './SystemMonitor';
 import { EventEmitter } from 'events';
-import ConcurrencyImplementation, { WorkerInstance, CustomBroswerContextOptions } from './concurrency/ConcurrencyImplementation';
+import ConcurrencyImplementation, { WorkerInstance, CustomBroswerContextOptions, Proxy } from './concurrency/ConcurrencyImplementation';
 import PatchwrightBrowserPoolImplementation from './concurrency/PatchwrightBrowserPoolImplementation';
 
 const debug = util.debugGenerator('Cluster');
@@ -51,6 +51,7 @@ interface TaskFunctionArguments{
     data: JobData;
     worker: {
         id: number;
+        proxy?: Proxy;
     };
 }
 

@@ -1,13 +1,13 @@
 import type { BrowserContextOptions, LaunchOptions, Page } from "patchright"
 
-interface Proxy {
+export interface Proxy {
     server: string;
     username?: string;
     password?: string;
 };
 
 export interface CustomBroswerContextOptions extends BrowserContextOptions {
-    proxyGenerator: () => Proxy;
+    proxyGenerator?: () => Proxy;
 }
 
 /**
@@ -78,4 +78,5 @@ export interface JobInstance {
 
 export interface ResourceData {
     page: Page;
+    proxy?: Proxy
 }

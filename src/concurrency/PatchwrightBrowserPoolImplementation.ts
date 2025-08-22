@@ -57,10 +57,28 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     }
 
     protected async createResources(): Promise<ResourceData> {
-        const contextOptions = this.contextOptions?.proxyGenerator === undefined ? this.contextOptions : { ...this.contextOptions, proxy: this.contextOptions?.proxyGenerator() }
-        const page = await (<Browser>this.browser).newPage(this.contextOptions);
+        let page = undefined;
+        let proxy = undefined;
+        if (this.contextOptions) {
+            const options = {
+                ...this.contextOptions
+            };
+
+            if (this.contextOptions?.proxyGenerator !== undefined) {
+                options.proxy = this.contextOptions.proxyGenerator();
+            }
+
+            delete options.proxyGenerator;
+
+            page = await (<Browser>this.browser).newPage(options);
+            proxy = options.proxy;
+        } else {
+            page = await (<Browser>this.browser).newPage();
+        }
+        
         return {
             page,
+            proxy
         };
     }
 
