@@ -5,8 +5,7 @@
         "module": "commonjs",
         "moduleResolution": "node",
         "types": [
-            "node",
-            "jest"
+            "node"
         ],
 
         "rootDir": "./src",
