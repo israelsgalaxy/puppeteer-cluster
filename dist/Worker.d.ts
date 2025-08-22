@@ -1,4 +1,4 @@
-import Job from './Job';
+import Job, { JobData } from './Job';
 import type Cluster from './Cluster';
 import type { TaskFunction } from './Cluster';
 import { WorkerInstance } from './concurrency/ConcurrencyImplementation';
@@ -11,10 +11,12 @@ interface WorkerOptions {
 export interface WorkError {
     type: 'error';
     error: Error;
+    jobData?: JobData;
 }
 export interface WorkData {
     type: 'success';
     data: any;
+    jobData?: JobData;
 }
 export type WorkResult = WorkError | WorkData;
 export default class Worker<ReturnData> implements WorkerOptions {

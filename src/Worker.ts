@@ -20,11 +20,13 @@ const WORKER_INSTANCE_TRIES = 10;
 export interface WorkError {
     type: 'error';
     error: Error;
+    jobData?: JobData;
 }
 
 export interface WorkData {
     type: 'success';
     data: any;
+    jobData?: JobData;
 }
 
 export type WorkResult = WorkError | WorkData;
@@ -105,11 +107,13 @@ export default class Worker<ReturnData> implements WorkerOptions {
             return {
                 type: 'error',
                 error: errorState || new Error('asf'),
+                jobData: job.data
             };
         }
         return {
             data: result,
             type: 'success',
+            jobData: job.data
         };
     }
 
