@@ -61,24 +61,26 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
         let page = undefined;
         let proxy = undefined;
 
-        const userAgent = new UserAgent([{deviceCategory: "desktop", vendor: "Google Inc."}]);        
-        const newUserAgentString = userAgent.data.userAgent.replace(new RegExp(`\\([^)]+\\)`), "(X11; Linux x86_64)");
+        // const userAgent = new UserAgent([{deviceCategory: "desktop", vendor: "Google Inc."}]);        
+        // const newUserAgentString = userAgent.data.userAgent.replace(new RegExp(`\\([^)]+\\)`), "(X11; Linux x86_64)");
 
         const options: {
-            screen: { width: number; height: number };
-            userAgent: string;
+            // screen: { width: number; height: number };
+            // userAgent: string;
             viewport: { width: number; height: number };
             proxy?: Proxy;
             proxyGenerator?: () => Proxy;
         } = {
-            screen: {
-                width: userAgent.data.screenWidth,
-                height: userAgent.data.screenHeight
-            },
-            userAgent: newUserAgentString,
+            // screen: {
+            //     width: userAgent.data.screenWidth,
+            //     height: userAgent.data.screenHeight
+            // },
+            // userAgent: newUserAgentString,
             viewport: {
-                width: userAgent.data.viewportWidth,
-                height: userAgent.data.viewportHeight
+                // width: userAgent.data.viewportWidth,
+                // height: userAgent.data.viewportHeight
+                width: Math.floor(1024 + Math.random() * 100),
+                height: Math.floor(768 + Math.random() * 100)
             },
             proxy: undefined,
             proxyGenerator: undefined
