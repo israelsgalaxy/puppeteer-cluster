@@ -6,7 +6,6 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     private repairRequested;
     private openInstances;
     private waitingForRepairResolvers;
-    private userAgentGenerator;
     constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions);
     private repair;
     init(): Promise<void>;

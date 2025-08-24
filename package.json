@@ -12,8 +12,7 @@
   "dependencies": {
     "debug": "^4.3.4",
     "patchright": "^1.52.5",
-    "user-agents": "^1.1.641",
-    "useragent": "^2.3.0"
+    "user-agents": "^1.1.641"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

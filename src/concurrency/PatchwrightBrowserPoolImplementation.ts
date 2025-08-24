@@ -1,6 +1,5 @@
 import { chromium, Browser, LaunchOptions } from 'patchright';
 import UserAgent = require('user-agents');
-import UserAgentParser = require("useragent");
 
 import ConcurrencyImplementation, { ResourceData, CustomBroswerContextOptions, Proxy } from './ConcurrencyImplementation';
 
@@ -17,10 +16,6 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     private repairRequested: boolean = false;
     private openInstances: number = 0;
     private waitingForRepairResolvers: (() => void)[] = [];
-    private userAgentGenerator = new UserAgent([{deviceCategory: "desktop", platform: "Linux"}, (data) => {
-        const parsedUa = UserAgentParser.parse(data.userAgent);
-        return parsedUa.family === "Chromium";
-    }]);
 
     constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions) {
         super(launchOptions, contextOptions);
@@ -65,7 +60,10 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     protected async createResources(): Promise<ResourceData> {
         let page = undefined;
         let proxy = undefined;
-        const userAgent = this.userAgentGenerator.random();
+
+        const userAgent = new UserAgent([{deviceCategory: "desktop", vendor: "Google Inc."}]);        
+        const newUserAgentString = userAgent.data.userAgent.replace(new RegExp(`\\([^)]+\\)`), "(X11; Linux x86_64)");
+
         const options: {
             screen: { width: number; height: number };
             userAgent: string;
@@ -77,7 +75,7 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
                 width: userAgent.data.screenWidth,
                 height: userAgent.data.screenHeight
             },
-            userAgent: userAgent.data.userAgent,
+            userAgent: newUserAgentString,
             viewport: {
                 width: userAgent.data.viewportWidth,
                 height: userAgent.data.viewportHeight
