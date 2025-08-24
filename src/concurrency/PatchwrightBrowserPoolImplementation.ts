@@ -1,6 +1,8 @@
 import { chromium, Browser, LaunchOptions } from 'patchright';
+import UserAgent = require('user-agents');
+import UserAgentParser = require("useragent");
 
-import ConcurrencyImplementation, { ResourceData, CustomBroswerContextOptions } from './ConcurrencyImplementation';
+import ConcurrencyImplementation, { ResourceData, CustomBroswerContextOptions, Proxy } from './ConcurrencyImplementation';
 
 import { debugGenerator, timeoutExecute } from '../util';
 const debug = debugGenerator('SingleBrowserImpl');
@@ -15,6 +17,10 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     private repairRequested: boolean = false;
     private openInstances: number = 0;
     private waitingForRepairResolvers: (() => void)[] = [];
+    private userAgentGenerator = new UserAgent([{deviceCategory: "desktop", platform: "Linux"}, (data) => {
+        const parsedUa = UserAgentParser.parse(data.userAgent);
+        return parsedUa.family === "Chromium" && Number.parseInt(parsedUa.major) >= 124;
+    }]);
 
     constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions) {
         super(launchOptions, contextOptions);
@@ -59,21 +65,39 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     protected async createResources(): Promise<ResourceData> {
         let page = undefined;
         let proxy = undefined;
+        const userAgent = this.userAgentGenerator.random();
+        const options: {
+            screen: { width: number; height: number };
+            userAgent: string;
+            viewport: { width: number; height: number };
+            proxy?: Proxy;
+            proxyGenerator?: () => Proxy;
+        } = {
+            screen: {
+                width: userAgent.data.screenWidth,
+                height: userAgent.data.screenHeight
+            },
+            userAgent: userAgent.data.userAgent,
+            viewport: {
+                width: userAgent.data.viewportWidth,
+                height: userAgent.data.viewportHeight
+            },
+            proxy: undefined,
+            proxyGenerator: undefined
+        };
+
         if (this.contextOptions) {
-            const options = {
-                ...this.contextOptions
-            };
+            Object.assign(options, this.contextOptions);
 
             if (this.contextOptions?.proxyGenerator !== undefined) {
                 options.proxy = this.contextOptions.proxyGenerator();
+                delete options.proxyGenerator;
             }
-
-            delete options.proxyGenerator;
 
             page = await (<Browser>this.browser).newPage(options);
             proxy = options.proxy;
         } else {
-            page = await (<Browser>this.browser).newPage();
+            page = await (<Browser>this.browser).newPage(options);
         }
         
         return {
