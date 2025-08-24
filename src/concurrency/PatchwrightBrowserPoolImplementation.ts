@@ -19,7 +19,7 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     private waitingForRepairResolvers: (() => void)[] = [];
     private userAgentGenerator = new UserAgent([{deviceCategory: "desktop", platform: "Linux"}, (data) => {
         const parsedUa = UserAgentParser.parse(data.userAgent);
-        return parsedUa.family === "Chromium" && Number.parseInt(parsedUa.major) >= 124;
+        return parsedUa.family === "Chromium";
     }]);
 
     constructor(launchOptions: LaunchOptions, contextOptions?: CustomBroswerContextOptions) {
