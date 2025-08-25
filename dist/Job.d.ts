@@ -13,6 +13,7 @@ export default class Job<ReturnData> {
     data?: JobData;
     taskFunction: TaskFunction<ReturnData> | undefined;
     executeCallbacks: ExecuteCallbacks | undefined;
+    createdAt: number;
     private lastError;
     tries: number;
     constructor(data?: JobData, taskFunction?: TaskFunction<ReturnData>, executeCallbacks?: ExecuteCallbacks);

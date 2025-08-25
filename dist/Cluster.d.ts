@@ -12,6 +12,8 @@ interface ClusterOptions {
     retryDelay: number;
     launchOptions: LaunchOptions;
     contextOptions?: CustomBroswerContextOptions;
+    browserCount: number;
+    taskQueueTimeout: number;
 }
 type Partial<T> = {
     [P in keyof T]?: T[P];
@@ -38,7 +40,8 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
     private taskFunction;
     private idleResolvers;
     private waitForOneResolvers;
-    private browser;
+    private browsers;
+    private currentBrowserIndex;
     private isClosed;
     private startTime;
     private nextWorkerId;

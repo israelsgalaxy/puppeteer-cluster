@@ -1,5 +1,4 @@
 import { chromium, Browser, LaunchOptions } from 'patchright';
-import UserAgent = require('user-agents');
 
 import ConcurrencyImplementation, { ResourceData, CustomBroswerContextOptions, Proxy } from './ConcurrencyImplementation';
 
@@ -39,7 +38,7 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
         }
 
         try {
-            this.browser = await chromium.launch(this.launchOptions);
+            this.init()
         } catch (err) {
             throw new Error('Unable to restart browser pool.');
         }
@@ -54,31 +53,23 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     }
 
     public async close() {
-        await (<Browser>this.browser).close();
+        try {
+            await (<Browser>this.browser).close();
+        } catch (err: any) {
+            debug(`Error: Unable to close browser, message: ${err.message}`);
+        }
     }
 
     protected async createResources(): Promise<ResourceData> {
         let page = undefined;
         let proxy = undefined;
 
-        // const userAgent = new UserAgent([{deviceCategory: "desktop", vendor: "Google Inc."}]);        
-        // const newUserAgentString = userAgent.data.userAgent.replace(new RegExp(`\\([^)]+\\)`), "(X11; Linux x86_64)");
-
         const options: {
-            // screen: { width: number; height: number };
-            // userAgent: string;
             viewport: { width: number; height: number };
             proxy?: Proxy;
             proxyGenerator?: () => Proxy;
         } = {
-            // screen: {
-            //     width: userAgent.data.screenWidth,
-            //     height: userAgent.data.screenHeight
-            // },
-            // userAgent: newUserAgentString,
             viewport: {
-                // width: userAgent.data.viewportWidth,
-                // height: userAgent.data.viewportHeight
                 width: Math.floor(1024 + Math.random() * 100),
                 height: Math.floor(768 + Math.random() * 100)
             },
@@ -107,7 +98,11 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
     }
 
     protected async freeResources(resources: ResourceData): Promise<void> {
-        await resources.page.close();
+        try {
+            await resources.page.close();
+        } catch (err: any) {
+            debug(`Error: Unable to close browser context, message: ${err.message}`);
+        }
     }
 
     public async workerInstance() {
@@ -144,7 +139,7 @@ export default class PatchwrightBrowserPoolImplementation extends ConcurrencyImp
             close: async () => {
                 debug('Close requested for worker in browser pool.');
                 if (!closed)
-                    await resources.page.close();
+                    await timeoutExecute(BROWSER_TIMEOUT, this.freeResources(resources));
             },
 
             repair: async () => {

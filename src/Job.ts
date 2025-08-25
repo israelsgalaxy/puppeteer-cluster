@@ -18,6 +18,7 @@ export default class Job<ReturnData> {
     public data?: JobData;
     public taskFunction: TaskFunction<ReturnData> | undefined;
     public executeCallbacks: ExecuteCallbacks | undefined;
+    public createdAt: number = Date.now();
 
     private lastError: Error | null = null;
     public tries: number = 0;

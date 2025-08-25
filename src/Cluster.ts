@@ -23,6 +23,8 @@ interface ClusterOptions {
     retryDelay: number;
     launchOptions: LaunchOptions;
     contextOptions?: CustomBroswerContextOptions;
+    browserCount: number;
+    taskQueueTimeout: number;
 }
 
 type Partial<T> = {
@@ -43,7 +45,9 @@ const DEFAULT_OPTIONS: ClusterOptions = {
         channel: "chrome",
         headless: true
     },
-    contextOptions: undefined
+    contextOptions: undefined,
+    browserCount: 3,
+    taskQueueTimeout: 30
 };
 
 interface TaskFunctionArguments{
@@ -79,7 +83,8 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
     private taskFunction: TaskFunction<ReturnData> | null = null;
     private idleResolvers: (() => void)[] = [];
     private waitForOneResolvers: ((data:JobData) => void)[] = [];
-    private browser: ConcurrencyImplementation | null = null;
+    private browsers: ConcurrencyImplementation[] = [];
+    private currentBrowserIndex = 0;
 
     private isClosed = false;
     private startTime = Date.now();
@@ -117,20 +122,10 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
     }
 
     private async init() {
-        if (this.options.concurrency === Cluster.CONCURRENCY_CONTEXT) {
-            this.browser = new PatchwrightBrowserPoolImplementation(this.options.launchOptions, this.options.contextOptions);
-        } else {
-            throw new Error(`Unknown concurrency option: ${this.options.concurrency}`);
-        }
-
-        if (typeof this.options.maxConcurrency !== 'number') {
-            throw new Error('maxConcurrency must be of number type');
-        }
-
-        try {
-            await this.browser?.init();
-        } catch (err: any) {
-            throw new Error(`Unable to launch browser, error message: ${err.message}`);
+        for (let i = 0; i < this.options.browserCount; i++) {
+            const browser = new PatchwrightBrowserPoolImplementation(this.options.launchOptions, this.options.contextOptions);
+            await browser.init();
+            this.browsers.push(browser);
         }
 
         if (this.options.monitor) {
@@ -156,7 +151,8 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
 
         let workerInstance: WorkerInstance;
         try {
-            workerInstance = await (this.browser as ConcurrencyImplementation).workerInstance();
+            workerInstance = await (this.browsers[this.currentBrowserIndex] as ConcurrencyImplementation).workerInstance();
+            this.currentBrowserIndex = (this.currentBrowserIndex + 1 + this.options.browserCount) % this.options.browserCount;
         } catch (err: any) {
             throw new Error(`Unable to launch browser for worker, error message: ${err.message}`);
         }
@@ -171,7 +167,11 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
 
         if (this.isClosed) {
             // cluster was closed while we created a new worker (should rarely happen)
-            worker.close();
+            try {
+                await worker.close();
+            } catch (err: any) {
+                debug(`Error: Unable to close worker, message: ${err.message}`);
+            }
         } else {
             this.workers.push(worker);
         }
@@ -227,6 +227,11 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
 
         if (job === undefined) {
             // skip, there are items in the queue but they are all delayed
+            return;
+        }
+
+        const timeInQueue = (Date.now() - job.createdAt);
+        if (timeInQueue > this.options.taskQueueTimeout) {
             return;
         }
 
@@ -287,7 +292,11 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
         worker.busy = false;
         this.workersBusy -= 1;
 
-        await worker.close();
+        try {
+            await worker.close();
+        } catch (err: any) {
+            debug(`Error: Unable to close worker, message: ${err.message}`);
+        }
         await this.launchWorker();
 
         this.work();
@@ -341,10 +350,15 @@ export default class Cluster<ReturnData = any> extends EventEmitter {
         clearTimeout(this.workCallTimeout as NodeJS.Timeout);
 
         // close workers
-        await Promise.all(this.workers.map(worker => worker.close()));
+        try {
+            await Promise.all(this.workers.map(worker => worker.close()));
+        } catch (err: any) {
+            debug(`Error: Unable to close workers, message: ${err.message}`);
+        }
 
         try {
-            await (this.browser as ConcurrencyImplementation).close();
+            for (let i = 0; i < this.options.browserCount; i++)
+                await (this.browsers[i] as ConcurrencyImplementation).close();
         } catch (err: any) {
             debug(`Error: Unable to close browser, message: ${err.message}`);
         }

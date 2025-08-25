@@ -11,14 +11,11 @@
   "license": "MIT",
   "dependencies": {
     "debug": "^4.3.4",
-    "patchright": "^1.52.5",
-    "user-agents": "^1.1.641"
+    "patchright": "^1.52.5"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/node": "^20.11.28",
-    "@types/user-agents": "^1.0.4",
-    "@types/useragent": "^2.3.4",
     "typescript": "^5.4.2"
   }
 }
