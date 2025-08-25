@@ -1,8 +1,8 @@
 {
     "compilerOptions": {
-        "target": "es2016",
-        "lib": [ "es2017" ],
-        "module": "commonjs",
+        "target": "es2022",
+        "lib": [ "es2022", "DOM" ],
+        "module": "es2022",
         "moduleResolution": "node",
         "types": [
             "node"
@@ -16,7 +16,9 @@
         "noImplicitReturns": true,
 
         "declaration": true,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+
+        "sourceMap": false,
     },
     "include": [
         "./src/**/*"

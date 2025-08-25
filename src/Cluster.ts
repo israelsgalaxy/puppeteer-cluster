@@ -50,7 +50,7 @@ const DEFAULT_OPTIONS: ClusterOptions = {
     taskQueueTimeout: 30
 };
 
-interface TaskFunctionArguments{
+export interface TaskFunctionArguments{
     page: Page;
     data: JobData;
     worker: {

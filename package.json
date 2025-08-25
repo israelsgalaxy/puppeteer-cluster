@@ -1,7 +1,7 @@
 {
-  "name": "patchright-browserpool-cluster",
+  "name": "turnstile-patchright-browserpool-cluster",
   "version": "0.0.1",
-  "description": "Cluster management for patchright",
+  "description": "Solve turnstile challenges with a patchright browser cluster",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -10,8 +10,14 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@types/express": "^5.0.3",
+    "@types/yargs": "^17.0.33",
     "debug": "^4.3.4",
-    "patchright": "^1.52.5"
+    "express": "^5.1.0",
+    "patchright": "^1.52.5",
+    "pm2": "^6.0.8",
+    "redis": "^5.8.2",
+    "yargs": "^18.0.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
